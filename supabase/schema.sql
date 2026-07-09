@@ -149,7 +149,9 @@ create trigger on_auth_user_created
 -- Insere uma despesa 'pending' para o dono do token, em background.
 -- ─────────────────────────────────────────────────────────────
 
-create or replace function public.wallet_add(p_token uuid, p_amount text, p_merchant text)
+-- Os nomes dos parâmetros têm de coincidir com os campos do JSON enviado
+-- pelo Atalho: {"token": …, "amount": …, "merchant": …}.
+create or replace function public.wallet_add(token uuid, amount text, merchant text)
 returns text
 language plpgsql
 security definer set search_path = ''
@@ -159,27 +161,29 @@ declare
   v_clean text;
   v_cents int;
 begin
-  select user_id into v_user from public.wallet_tokens where token = p_token;
+  select t.user_id into v_user
+  from public.wallet_tokens t
+  where t.token = wallet_add.token;
   if v_user is null then
     raise exception 'token inválido';
   end if;
 
   -- "12,50 €" / "1 234.56" → cêntimos (o separador mais à direita é o decimal)
-  v_clean := regexp_replace(coalesce(p_amount, ''), '[^0-9.,]', '', 'g');
+  v_clean := regexp_replace(coalesce(amount, ''), '[^0-9.,]', '', 'g');
   v_clean := replace(v_clean, ',', '.');
   if v_clean ~ '\..*\.' then
     v_clean := regexp_replace(v_clean, '\.(?=.*\.)', '', 'g');
   end if;
   if v_clean = '' or v_clean !~ '^[0-9]*\.?[0-9]+$' then
-    raise exception 'valor inválido: %', p_amount;
+    raise exception 'valor inválido: %', amount;
   end if;
   v_cents := round(v_clean::numeric * 100)::int;
   if v_cents <= 0 then
-    raise exception 'valor inválido: %', p_amount;
+    raise exception 'valor inválido: %', amount;
   end if;
 
   insert into public.transactions (user_id, type, amount_cents, description, date, source, status)
-  values (v_user, 'expense', v_cents, coalesce(nullif(trim(p_merchant), ''), 'Pagamento Wallet'), current_date, 'wallet', 'pending');
+  values (v_user, 'expense', v_cents, coalesce(nullif(trim(merchant), ''), 'Pagamento Wallet'), current_date, 'wallet', 'pending');
 
   return 'ok';
 end;
