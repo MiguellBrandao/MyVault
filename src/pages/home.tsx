@@ -1,11 +1,13 @@
-import { useLiveQuery } from 'dexie-react-hooks'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Settings } from 'lucide-react'
-import { db } from '@/lib/db'
-import { formatCents, formatMonth, todayISO } from '@/lib/money'
+import { Settings, Wallet } from 'lucide-react'
+import { useCategories, useGoalEntries, useGoals, useTransactions } from '@/lib/hooks'
+import { formatCents, formatDate, formatMonth, todayISO } from '@/lib/money'
+import type { Transaction } from '@/lib/types'
 import { AmountText } from '@/components/amount-text'
 import { TxRow } from '@/components/tx-row'
 import { EmptyState } from '@/components/empty-state'
+import { PendingDrawer } from '@/components/pending-drawer'
 import { Progress } from '@/components/ui/progress'
 
 function capitalize(s: string) {
@@ -31,43 +33,72 @@ function FlowStrip({ income, expense }: { income: number; expense: number }) {
   )
 }
 
+function PendingRow({ tx }: { tx: Transaction }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center gap-3 py-2.5 text-left"
+      >
+        <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brass/15 text-brass">
+          <Wallet className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-medium">{tx.description}</span>
+          <span className="block text-xs text-muted-foreground">{formatDate(tx.date)} · por confirmar</span>
+        </span>
+        <AmountText cents={tx.amountCents} type="expense" className="text-sm font-medium" />
+      </button>
+      <PendingDrawer tx={tx} open={open} onOpenChange={setOpen} />
+    </>
+  )
+}
+
 export default function HomePage() {
-  const monthKey = todayISO().slice(0, 7)
+  const today = todayISO()
+  const monthKey = today.slice(0, 7)
 
-  const txs = useLiveQuery(
-    () => db.transactions.where('date').startsWith(monthKey).toArray(),
-    [monthKey],
-  )
-  const categories = useLiveQuery(() => db.categories.toArray(), [])
-  const goals = useLiveQuery(() => db.goals.toArray(), [])
-  const goalEntries = useLiveQuery(() => db.goalEntries.toArray(), [])
-  const recent = useLiveQuery(
-    () => db.transactions.orderBy('createdAt').reverse().limit(5).toArray(),
-    [],
-  )
+  const { data: txs } = useTransactions()
+  const { data: categories } = useCategories()
+  const { data: goals } = useGoals()
+  const { data: goalEntries } = useGoalEntries()
 
-  if (!txs || !categories || !goals || !goalEntries || !recent) return null
+  if (!txs || !categories || !goals || !goalEntries) return null
 
   const catMap = new Map(categories.map((c) => [c.id, c]))
-  const income = txs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amountCents, 0)
-  const expense = txs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amountCents, 0)
-  const net = income - expense
+  const confirmed = txs.filter((t) => t.status === 'confirmed')
+  const pending = txs.filter((t) => t.status === 'pending')
 
-  const byCategory = new Map<number, number>()
-  for (const t of txs) {
+  // Saldo total: tudo o que já aconteceu (movimentos futuros só contam na data).
+  const balance = confirmed
+    .filter((t) => t.date <= today)
+    .reduce((s, t) => s + (t.type === 'income' ? t.amountCents : -t.amountCents), 0)
+  const inGoals = goalEntries.reduce((s, e) => s + e.amountCents, 0)
+  const available = balance - inGoals
+
+  const monthTxs = confirmed.filter((t) => t.date.startsWith(monthKey))
+  const income = monthTxs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amountCents, 0)
+  const expense = monthTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amountCents, 0)
+
+  const byCategory = new Map<string, number>()
+  for (const t of monthTxs) {
     if (t.type !== 'expense' || !t.categoryId) continue
     byCategory.set(t.categoryId, (byCategory.get(t.categoryId) ?? 0) + t.amountCents)
   }
-  const topCategories = [...byCategory.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
+  const topCategories = [...byCategory.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
   const maxCat = topCategories[0]?.[1] ?? 0
 
-  const savedByGoal = new Map<number, number>()
+  const savedByGoal = new Map<string, number>()
   for (const e of goalEntries) {
     savedByGoal.set(e.goalId, (savedByGoal.get(e.goalId) ?? 0) + e.amountCents)
   }
   const previewGoals = goals.slice(0, 2)
+
+  const recent = [...confirmed]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 5)
 
   return (
     <div className="flex flex-col gap-6">
@@ -88,14 +119,47 @@ export default function HomePage() {
       </header>
 
       <section className="rounded-3xl bg-card p-5">
-        <p className="text-sm text-muted-foreground">Saldo do mês</p>
+        <p className="text-sm text-muted-foreground">Saldo total</p>
         <p className="amount mt-1 text-4xl font-semibold">
-          {net < 0 ? '−' : ''}
-          {formatCents(Math.abs(net))}
+          {balance < 0 ? '−' : ''}
+          {formatCents(Math.abs(balance))}
         </p>
-        <div className="mt-4">
-          <FlowStrip income={income} expense={expense} />
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="rounded-2xl bg-secondary/50 p-3">
+            <p className="text-xs text-muted-foreground">Disponível para gastar</p>
+            <p className="amount mt-0.5 font-semibold">
+              {available < 0 ? '−' : ''}
+              {formatCents(Math.abs(available))}
+            </p>
+          </div>
+          <Link to="/metas" className="rounded-2xl bg-brass/10 p-3">
+            <p className="text-xs text-muted-foreground">Guardado em metas</p>
+            <p className="amount mt-0.5 font-semibold text-brass">{formatCents(inGoals)}</p>
+          </Link>
         </div>
+      </section>
+
+      {pending.length > 0 && (
+        <section>
+          <h2 className="mb-1 text-lg font-semibold">Por confirmar</h2>
+          <div className="divide-y divide-border rounded-3xl border border-brass/30 bg-card px-4 py-1">
+            {pending.map((t) => (
+              <PendingRow key={t.id} tx={t} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="rounded-3xl bg-card p-5">
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold">Este mês</h2>
+          <AmountText
+            cents={Math.abs(income - expense)}
+            type={income - expense >= 0 ? 'income' : 'expense'}
+            className="text-sm"
+          />
+        </div>
+        <FlowStrip income={income} expense={expense} />
         <div className="mt-3 flex justify-between text-sm">
           <span className="flex items-center gap-1.5 text-muted-foreground">
             <span aria-hidden className="size-2 rounded-full bg-chart-2" />
@@ -149,10 +213,7 @@ export default function HomePage() {
               return (
                 <Link to="/metas" key={g.id} className="rounded-3xl bg-card p-4">
                   <div className="mb-2 flex items-center justify-between gap-2 text-sm">
-                    <span className="min-w-0 truncate font-medium">
-                      <span aria-hidden className="mr-1.5">{g.emoji}</span>
-                      {g.name}
-                    </span>
+                    <span className="min-w-0 truncate font-medium">{g.name}</span>
                     <span className="amount shrink-0 whitespace-nowrap text-xs text-muted-foreground">
                       {formatCents(saved)} / {formatCents(g.targetCents)}
                     </span>

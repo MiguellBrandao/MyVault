@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createHashRouter, RouterProvider } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from '@/App'
 import HomePage from '@/pages/home'
 import TransactionsPage from '@/pages/transactions'
@@ -8,8 +9,13 @@ import GoalsPage from '@/pages/goals'
 import DebtsPage from '@/pages/debts'
 import SettingsPage from '@/pages/settings'
 import ShortcutGuidePage from '@/pages/shortcut-guide'
-import WalletAddPage from '@/pages/wallet-add'
 import '@/index.css'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { staleTime: 30_000, retry: 1 },
+  },
+})
 
 const router = createHashRouter([
   {
@@ -22,16 +28,14 @@ const router = createHashRouter([
       { path: 'dividas', element: <DebtsPage /> },
       { path: 'ajustes', element: <SettingsPage /> },
       { path: 'ajustes/atalho', element: <ShortcutGuidePage /> },
-      { path: 'add', element: <WalletAddPage /> },
     ],
   },
 ])
 
-// Pede ao browser para não despejar o armazenamento local (dados financeiros!).
-navigator.storage?.persist?.()
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>
   </StrictMode>,
 )

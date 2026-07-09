@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 import { formatCents } from '@/lib/money'
-import type { TxType } from '@/lib/db'
+import type { TxType } from '@/lib/types'
 
 interface AmountTextProps {
   cents: number

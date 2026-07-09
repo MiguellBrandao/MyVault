@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Trash2 } from 'lucide-react'
-import { db, type Transaction, type TxType } from '@/lib/db'
+import * as api from '@/lib/api'
+import { useAppMutation, useCategories } from '@/lib/hooks'
+import type { Transaction, TxType } from '@/lib/types'
 import { parseAmount, todayISO } from '@/lib/money'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -44,62 +46,49 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
   const [type, setType] = useState<TxType>(defaultType)
   const [amountStr, setAmountStr] = useState('')
   const [description, setDescription] = useState('')
-  const [categoryId, setCategoryId] = useState<number | undefined>()
+  const [categoryId, setCategoryId] = useState<string | null>(null)
   const [date, setDate] = useState(todayISO())
+
+  const { data: categories } = useCategories()
 
   useEffect(() => {
     if (!isOpen) return
     setType(tx?.type ?? defaultType)
     setAmountStr(tx ? (tx.amountCents / 100).toFixed(2).replace('.', ',') : '')
     setDescription(tx?.description ?? '')
-    setCategoryId(tx?.categoryId)
+    setCategoryId(tx?.categoryId ?? null)
     setDate(tx?.date ?? todayISO())
   }, [isOpen, tx, defaultType])
 
-  async function save() {
+  const save = useAppMutation(async () => {
     const amountCents = parseAmount(amountStr)
-    if (!amountCents) {
-      toast.error('Indica um valor válido.')
-      return
-    }
+    if (!amountCents) throw new Error('Indica um valor válido.')
     let finalDescription = description.trim()
     if (!finalDescription && categoryId) {
-      const cat = await db.categories.get(categoryId)
-      finalDescription = cat?.name ?? ''
+      finalDescription = categories?.find((c) => c.id === categoryId)?.name ?? ''
     }
-    if (!finalDescription) {
-      toast.error('Indica uma descrição ou escolhe uma categoria.')
-      return
-    }
+    if (!finalDescription) throw new Error('Indica uma descrição ou escolhe uma categoria.')
+    const input = { type, amountCents, description: finalDescription, categoryId, date }
     if (tx) {
-      await db.transactions.update(tx.id, {
-        type,
-        amountCents,
-        description: finalDescription,
-        categoryId,
-        date,
-      })
-      toast.success('Movimento atualizado.')
+      await api.updateTransaction(tx.id, input)
     } else {
-      await db.transactions.add({
-        type,
-        amountCents,
-        description: finalDescription,
-        categoryId,
-        date,
-        source: 'manual',
-        createdAt: Date.now(),
-      } as Transaction)
-      toast.success(type === 'expense' ? 'Despesa registada.' : 'Ganho registado.')
+      await api.addTransaction(input)
     }
-    setOpen(false)
-  }
+  })
 
-  async function remove() {
-    if (!tx) return
-    await db.transactions.delete(tx.id)
-    toast.success('Movimento apagado.')
-    setOpen(false)
+  const remove = useAppMutation(async () => {
+    if (tx) await api.deleteTransaction(tx.id)
+  }, 'Movimento apagado.')
+
+  function submit() {
+    save.mutate(undefined, {
+      onSuccess: () => {
+        toast.success(
+          tx ? 'Movimento atualizado.' : type === 'expense' ? 'Despesa registada.' : 'Ganho registado.',
+        )
+        setOpen(false)
+      },
+    })
   }
 
   return (
@@ -117,7 +106,7 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
                 type="button"
                 role="radio"
                 aria-checked={type === 'expense'}
-                onClick={() => { setType('expense'); setCategoryId(undefined) }}
+                onClick={() => { setType('expense'); setCategoryId(null) }}
                 className={cn(
                   'rounded-full py-2 text-sm font-medium transition-colors',
                   type === 'expense' ? 'bg-expense/20 text-expense' : 'text-muted-foreground',
@@ -129,7 +118,7 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
                 type="button"
                 role="radio"
                 aria-checked={type === 'income'}
-                onClick={() => { setType('income'); setCategoryId(undefined) }}
+                onClick={() => { setType('income'); setCategoryId(null) }}
                 className={cn(
                   'rounded-full py-2 text-sm font-medium transition-colors',
                   type === 'income' ? 'bg-income/20 text-income' : 'text-muted-foreground',
@@ -175,10 +164,15 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
+              {date > todayISO() && (
+                <p className="text-xs text-muted-foreground">
+                  Movimento futuro: só conta para o saldo a partir dessa data.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-2 pt-1">
-              <Button size="lg" onClick={save}>
+              <Button size="lg" onClick={submit} disabled={save.isPending}>
                 {tx ? 'Guardar alterações' : type === 'expense' ? 'Registar despesa' : 'Registar ganho'}
               </Button>
               {tx && (
@@ -197,7 +191,11 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={remove}>Apagar</AlertDialogAction>
+                      <AlertDialogAction
+                        onClick={() => remove.mutate(undefined, { onSuccess: () => setOpen(false) })}
+                      >
+                        Apagar
+                      </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>

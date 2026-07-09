@@ -1,23 +1,27 @@
-import { db } from './db'
+import { supabase } from './supabase'
 import { todayISO } from './money'
 
+/** Ordem respeita as chaves estrangeiras (categorias antes de transações, etc.). */
 const TABLES = [
-  'transactions',
   'categories',
+  'transactions',
   'debts',
-  'debtPayments',
+  'debt_payments',
   'goals',
-  'goalEntries',
+  'goal_entries',
 ] as const
 
 export async function exportBackup() {
   const data: Record<string, unknown[]> = {}
   for (const name of TABLES) {
-    data[name] = await db.table(name).toArray()
+    const { data: rows, error } = await supabase.from(name).select('*')
+    if (error) throw new Error(error.message)
+    // user_id fica de fora: no restauro é preenchido pela sessão ativa.
+    data[name] = (rows ?? []).map(({ user_id: _userId, ...rest }) => rest)
   }
   const payload = {
     app: 'myvault',
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     data,
   }
@@ -36,13 +40,16 @@ export async function importBackup(file: File) {
   if (json?.app !== 'myvault' || typeof json.data !== 'object' || json.data === null) {
     throw new Error('O ficheiro não é um backup válido do MyVault.')
   }
-  await db.transaction('rw', db.tables, async () => {
-    for (const name of TABLES) {
-      await db.table(name).clear()
-      const rows = json.data[name]
-      if (Array.isArray(rows) && rows.length > 0) {
-        await db.table(name).bulkAdd(rows)
-      }
+  // Apagar na ordem inversa das FKs; inserir na ordem direta.
+  for (const name of [...TABLES].reverse()) {
+    const { error } = await supabase.from(name).delete().neq('id', crypto.randomUUID())
+    if (error) throw new Error(error.message)
+  }
+  for (const name of TABLES) {
+    const rows = json.data[name]
+    if (Array.isArray(rows) && rows.length > 0) {
+      const { error } = await supabase.from(name).insert(rows)
+      if (error) throw new Error(error.message)
     }
-  })
+  }
 }

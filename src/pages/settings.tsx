@@ -1,17 +1,21 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useLiveQuery } from 'dexie-react-hooks'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   ChevronRight,
   Download,
+  LogOut,
   Plus,
   Tags,
   Trash2,
   Upload,
   Wallet,
 } from 'lucide-react'
-import { db, type Category, type TxType } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
+import * as api from '@/lib/api'
+import { useAppMutation, useCategories } from '@/lib/hooks'
+import type { TxType } from '@/lib/types'
 import { exportBackup, importBackup } from '@/lib/backup'
 import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
@@ -36,34 +40,28 @@ import {
 } from '@/components/ui/alert-dialog'
 
 function CategoriesDrawer() {
-  const categories = useLiveQuery(() => db.categories.orderBy('order').toArray(), [])
+  const { data: categories } = useCategories()
   const [emoji, setEmoji] = useState('')
   const [name, setName] = useState('')
   const [type, setType] = useState<TxType>('expense')
 
-  async function add() {
-    if (!name.trim()) {
-      toast.error('Dá um nome à categoria.')
-      return
-    }
+  const add = useAppMutation(async () => {
+    if (!name.trim()) throw new Error('Dá um nome à categoria.')
     const maxOrder = (categories ?? [])
       .filter((c) => c.type === type)
-      .reduce((m, c) => Math.max(m, c.order), -1)
-    await db.categories.add({
+      .reduce((m, c) => Math.max(m, c.sortOrder), -1)
+    await api.addCategory({
       name: name.trim(),
       emoji: emoji.trim() || '🏷️',
       type,
-      order: maxOrder + 1,
-    } as Category)
-    setEmoji('')
-    setName('')
-    toast.success('Categoria criada.')
-  }
+      sortOrder: maxOrder + 1,
+    })
+  }, 'Categoria criada.')
 
-  async function remove(id: number) {
-    await db.categories.delete(id)
-    toast.success('Categoria apagada. Os movimentos antigos ficam «Sem categoria».')
-  }
+  const remove = useAppMutation(
+    (id: string) => api.deleteCategory(id),
+    'Categoria apagada. Os movimentos antigos ficam «Sem categoria».',
+  )
 
   function section(title: string, sectionType: TxType) {
     return (
@@ -78,7 +76,7 @@ function CategoriesDrawer() {
                 <span className="flex-1">{c.name}</span>
                 <button
                   type="button"
-                  onClick={() => remove(c.id)}
+                  onClick={() => remove.mutate(c.id)}
                   aria-label={`Apagar categoria ${c.name}`}
                   className="p-1 text-muted-foreground"
                 >
@@ -148,7 +146,19 @@ function CategoriesDrawer() {
                   aria-label="Nome"
                   className="flex-1"
                 />
-                <Button size="icon" onClick={add} aria-label="Adicionar categoria">
+                <Button
+                  size="icon"
+                  aria-label="Adicionar categoria"
+                  disabled={add.isPending}
+                  onClick={() =>
+                    add.mutate(undefined, {
+                      onSuccess: () => {
+                        setEmoji('')
+                        setName('')
+                      },
+                    })
+                  }
+                >
                   <Plus className="size-4" />
                 </Button>
               </div>
@@ -165,11 +175,13 @@ function CategoriesDrawer() {
 export default function SettingsPage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const queryClient = useQueryClient()
 
   async function confirmImport() {
     if (!pendingFile) return
     try {
       await importBackup(pendingFile)
+      queryClient.invalidateQueries()
       toast.success('Backup restaurado.')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Não foi possível importar o backup.')
@@ -177,6 +189,11 @@ export default function SettingsPage() {
       setPendingFile(null)
       if (fileRef.current) fileRef.current.value = ''
     }
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut()
+    queryClient.clear()
   }
 
   return (
@@ -195,7 +212,12 @@ export default function SettingsPage() {
       <div className="divide-y divide-border rounded-3xl bg-card">
         <button
           type="button"
-          onClick={() => exportBackup().then(() => toast.success('Backup exportado.'))}
+          onClick={() =>
+            exportBackup().then(
+              () => toast.success('Backup exportado.'),
+              (err) => toast.error(err instanceof Error ? err.message : 'Falha ao exportar.'),
+            )
+          }
           className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
         >
           <Download className="size-5 text-muted-foreground" />
@@ -210,6 +232,18 @@ export default function SettingsPage() {
           <span className="flex-1 font-medium">Importar backup</span>
         </button>
       </div>
+
+      <div className="rounded-3xl bg-card">
+        <button
+          type="button"
+          onClick={signOut}
+          className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+        >
+          <LogOut className="size-5 text-muted-foreground" />
+          <span className="flex-1 font-medium">Terminar sessão</span>
+        </button>
+      </div>
+
       <input
         ref={fileRef}
         type="file"
@@ -219,8 +253,8 @@ export default function SettingsPage() {
       />
 
       <p className="px-2 text-xs text-muted-foreground">
-        Os dados vivem apenas neste dispositivo. Exporta um backup com regularidade —
-        é a tua única cópia de segurança.
+        Os dados vivem na tua base de dados Supabase, protegidos por Row Level Security.
+        O backup JSON é uma rede de segurança extra.
       </p>
 
       <AlertDialog open={pendingFile !== null} onOpenChange={(o) => !o && setPendingFile(null)}>

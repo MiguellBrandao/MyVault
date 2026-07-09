@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useLiveQuery } from 'dexie-react-hooks'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { db, type TxType } from '@/lib/db'
+import { useCategories, useTransactions } from '@/lib/hooks'
+import type { TxType } from '@/lib/types'
 import { formatFullDate, formatMonth, todayISO } from '@/lib/money'
 import { AmountText } from '@/components/amount-text'
 import { TxRow } from '@/components/tx-row'
@@ -32,18 +32,18 @@ export default function TransactionsPage() {
   const [month, setMonth] = useState(currentMonth)
   const [filter, setFilter] = useState<Filter>('all')
 
-  const txs = useLiveQuery(
-    () => db.transactions.where('date').startsWith(month).toArray(),
-    [month],
-  )
-  const categories = useLiveQuery(() => db.categories.toArray(), [])
+  const { data: allTxs } = useTransactions()
+  const { data: categories } = useCategories()
 
-  if (!txs || !categories) return null
+  if (!allTxs || !categories) return null
 
   const catMap = new Map(categories.map((c) => [c.id, c]))
+  const txs = allTxs.filter((t) => t.status === 'confirmed' && t.date.startsWith(month))
   const filtered = txs
     .filter((t) => filter === 'all' || t.type === filter)
-    .sort((a, b) => (a.date === b.date ? b.createdAt - a.createdAt : b.date.localeCompare(a.date)))
+    .sort((a, b) =>
+      a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date.localeCompare(a.date),
+    )
 
   const byDay = new Map<string, typeof filtered>()
   for (const t of filtered) {
@@ -70,7 +70,12 @@ export default function TransactionsPage() {
           <ChevronLeft className="size-5" />
         </button>
         <div className="text-center">
-          <p className="text-sm font-medium">{capitalize(formatMonth(month))}</p>
+          <p className="text-sm font-medium">
+            {capitalize(formatMonth(month))}
+            {month > currentMonth && (
+              <span className="ml-1.5 text-xs text-brass">futuro</span>
+            )}
+          </p>
           <p className="amount text-xs text-muted-foreground">
             {net < 0 ? '−' : '+'}
             <AmountText cents={Math.abs(net)} signed={false} className="text-xs" />
@@ -79,9 +84,8 @@ export default function TransactionsPage() {
         <button
           type="button"
           onClick={() => setMonth((m) => shiftMonth(m, 1))}
-          disabled={month >= currentMonth}
           aria-label="Mês seguinte"
-          className="flex size-9 items-center justify-center rounded-full text-muted-foreground disabled:opacity-30"
+          className="flex size-9 items-center justify-center rounded-full text-muted-foreground"
         >
           <ChevronRight className="size-5" />
         </button>
@@ -111,7 +115,11 @@ export default function TransactionsPage() {
         <EmptyState
           emoji="🗓️"
           title="Sem movimentos neste mês"
-          hint="Usa o botão + para registar despesas e ganhos."
+          hint={
+            month > currentMonth
+              ? 'Podes adiantar despesas ou ganhos futuros com o botão +, escolhendo a data.'
+              : 'Usa o botão + para registar despesas e ganhos.'
+          }
         />
       ) : (
         <div className="flex flex-col gap-4">

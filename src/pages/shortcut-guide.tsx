@@ -1,9 +1,13 @@
+import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Copy } from 'lucide-react'
+import { Copy, RefreshCw } from 'lucide-react'
+import * as api from '@/lib/api'
+import { useAppMutation } from '@/lib/hooks'
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from '@/lib/supabase'
 import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 
-const ADD_URL = 'https://miguellbrandao.github.io/MyVault/#/add'
+const RPC_URL = `${SUPABASE_URL}/rest/v1/rpc/wallet_add`
 
 const STEPS = [
   {
@@ -12,41 +16,90 @@ const STEPS = [
   },
   {
     title: 'Escolhe o gatilho «Transação»',
-    body: 'No iOS 26 chama-se «Wallet». Só aparece se tiveres cartões configurados no Apple Pay. Seleciona os cartões que queres vigiar.',
+    body: 'No iOS 26 chama-se «Wallet». Seleciona os cartões que queres vigiar e marca «Executar imediatamente» — o registo acontece em segundo plano, sem abrir nada.',
   },
   {
-    title: 'Escolhe «Executar imediatamente»',
-    body: 'Assim o atalho corre logo após cada pagamento, sem passos extra. A confirmação é feita aqui na app.',
-  },
-  {
-    title: 'Adiciona a ação «Codificar URL»',
-    body: 'Como entrada, escolhe a variável «Comerciante» da transação. Isto garante que nomes com espaços ou acentos chegam bem à app.',
-  },
-  {
-    title: 'Adiciona a ação «Abrir URLs»',
-    body: 'Compõe o URL juntando as variáveis da transação, como mostrado abaixo.',
+    title: 'Adiciona a ação «Obter conteúdo de URL»',
+    body: 'Usa o URL abaixo. Em «Mostrar mais»: Método POST; cabeçalhos e corpo como indicado.',
   },
   {
     title: 'Testa com um pagamento',
-    body: 'Paga com Apple Pay: o ecrã «Pagamento detetado» abre com o valor e o comerciante preenchidos — só tens de confirmar a categoria e registar.',
+    body: 'Paga com Apple Pay. A despesa aparece no Início, em «Por confirmar» — um toque para escolher a categoria e confirmar.',
   },
 ]
 
-export default function ShortcutGuidePage() {
-  function copyUrl() {
-    navigator.clipboard.writeText(ADD_URL).then(
-      () => toast.success('URL copiado.'),
+function CopyField({ label, value, mono = true }: { label: string; value: string; mono?: boolean }) {
+  function copy() {
+    navigator.clipboard.writeText(value).then(
+      () => toast.success(`${label} copiado.`),
       () => toast.error('Não foi possível copiar.'),
     )
   }
+  return (
+    <div className="rounded-2xl bg-secondary/60 p-3">
+      <div className="mb-1 flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <button type="button" onClick={copy} aria-label={`Copiar ${label}`} className="p-1 text-muted-foreground">
+          <Copy className="size-4" />
+        </button>
+      </div>
+      <p className={`${mono ? 'amount' : ''} overflow-x-auto text-xs leading-relaxed break-all`}>{value}</p>
+    </div>
+  )
+}
+
+export default function ShortcutGuidePage() {
+  const { data: token, isLoading } = useQuery({
+    queryKey: ['wallet_token'],
+    queryFn: api.getWalletToken,
+  })
+
+  const regenerate = useAppMutation(
+    api.regenerateWalletToken,
+    token ? 'Novo token gerado — atualiza o Atalho.' : 'Token gerado.',
+  )
+
+  const body = token
+    ? `{"token": "${token}", "amount": "⟨Montante⟩", "merchant": "⟨Comerciante⟩"}`
+    : null
 
   return (
     <div className="flex flex-col gap-4 pb-6">
       <PageHeader
         title="Atalho da Wallet"
-        subtitle="Regista pagamentos Apple Pay automaticamente"
+        subtitle="Regista pagamentos Apple Pay em segundo plano"
         backTo="/ajustes"
       />
+
+      <section className="rounded-3xl border border-brass/30 bg-brass/5 p-4">
+        <p className="text-sm font-medium text-brass">O teu token secreto</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Autoriza o Atalho a registar despesas na tua conta. Não o partilhes; se o
+          expuseres, gera um novo.
+        </p>
+        {isLoading ? null : token ? (
+          <div className="mt-3 flex flex-col gap-2">
+            <CopyField label="Token" value={token} />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={regenerate.isPending}
+              onClick={() => regenerate.mutate(undefined)}
+            >
+              <RefreshCw className="size-4" /> Gerar novo token
+            </Button>
+          </div>
+        ) : (
+          <Button
+            className="mt-3"
+            size="sm"
+            disabled={regenerate.isPending}
+            onClick={() => regenerate.mutate(undefined)}
+          >
+            Gerar token
+          </Button>
+        )}
+      </section>
 
       <ol className="flex flex-col gap-3">
         {STEPS.map((step, i) => (
@@ -65,35 +118,27 @@ export default function ShortcutGuidePage() {
         ))}
       </ol>
 
-      <section className="rounded-3xl bg-card p-4">
-        <p className="mb-2 text-sm font-medium">URL a usar na ação «Abrir URLs»</p>
-        <code className="amount block overflow-x-auto rounded-2xl bg-secondary/60 p-3 text-xs leading-relaxed whitespace-nowrap">
-          {ADD_URL}?amount=<span className="text-brass">⟨Montante⟩</span>&merchant=
-          <span className="text-brass">⟨Texto codificado⟩</span>&source=wallet
-        </code>
-        <p className="mt-2 text-xs text-muted-foreground">
-          ⟨Montante⟩ é a variável «Montante» da transação; ⟨Texto codificado⟩ é o resultado
-          da ação «Codificar URL» do passo 4.
-        </p>
-        <Button variant="secondary" size="sm" className="mt-3" onClick={copyUrl}>
-          <Copy className="size-4" /> Copiar URL base
-        </Button>
-      </section>
-
-      <section className="rounded-3xl border border-brass/30 bg-brass/5 p-4 text-sm">
-        <p className="font-medium text-brass">Importante: onde abres a app</p>
-        <p className="mt-1 text-muted-foreground">
-          O atalho abre este URL no Safari. No iOS, o Safari e uma web app instalada
-          («Abrir como Web App») guardam os dados em locais separados — um registo feito
-          num não aparece no outro.
-        </p>
-        <p className="mt-2 text-muted-foreground">
-          Recomendação: adiciona o MyVault ao ecrã principal com a opção
-          «Abrir como Web App» <strong className="text-foreground">desligada</strong>. Ficas
-          com um ícone normal que abre no Safari — o mesmo sítio onde o atalho regista as
-          despesas. Se preferires a app instalada, testa primeiro se o registo do atalho
-          aparece lá.
-        </p>
+      <section className="flex flex-col gap-2">
+        <h2 className="px-1 text-sm font-medium text-muted-foreground">
+          Configuração da ação «Obter conteúdo de URL»
+        </h2>
+        <CopyField label="URL" value={RPC_URL} />
+        <CopyField label="Cabeçalho «apikey»" value={SUPABASE_ANON_KEY} />
+        <CopyField label="Cabeçalho «Content-Type»" value="application/json" />
+        {body ? (
+          <>
+            <CopyField label="Corpo do pedido (JSON)" value={body} />
+            <p className="px-1 text-xs text-muted-foreground">
+              No corpo, substitui ⟨Montante⟩ e ⟨Comerciante⟩ pelas variáveis da transação
+              (toca no campo e escolhe-as da barra de variáveis). Em alternativa, define o
+              corpo como JSON e adiciona os três campos: token, amount e merchant.
+            </p>
+          </>
+        ) : (
+          <p className="px-1 text-xs text-muted-foreground">
+            Gera primeiro o token acima para veres o corpo do pedido completo.
+          </p>
+        )}
       </section>
     </div>
   )

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { useLiveQuery } from 'dexie-react-hooks'
 import { toast } from 'sonner'
 import { Plus, Trash2, Pencil } from 'lucide-react'
-import { db, type Debt, type DebtDirection } from '@/lib/db'
-import { formatCents, formatDate, parseAmount, todayISO } from '@/lib/money'
+import * as api from '@/lib/api'
+import { useAppMutation, useDebtPayments, useDebts } from '@/lib/hooks'
+import type { Debt, DebtDirection } from '@/lib/types'
+import { formatCents, formatDate, parseAmount } from '@/lib/money'
 import { PageHeader } from '@/components/page-header'
 import { EmptyState } from '@/components/empty-state'
 import { AmountText } from '@/components/amount-text'
@@ -55,32 +56,23 @@ function DebtFormDrawer({
     setDueDate(debt?.dueDate ?? '')
   }, [open, debt])
 
-  async function save() {
+  const save = useAppMutation(async () => {
     const totalCents = parseAmount(totalStr)
-    if (!name.trim()) {
-      toast.error('Dá um nome à dívida.')
-      return
-    }
-    if (!totalCents) {
-      toast.error('Indica o valor total.')
-      return
-    }
-    const data = {
+    if (!name.trim()) throw new Error('Dá um nome à dívida.')
+    if (!totalCents) throw new Error('Indica o valor total.')
+    const input = {
       direction,
       name: name.trim(),
-      person: person.trim() || undefined,
+      person: person.trim() || null,
       totalCents,
-      dueDate: dueDate || undefined,
+      dueDate: dueDate || null,
     }
     if (debt) {
-      await db.debts.update(debt.id, data)
-      toast.success('Dívida atualizada.')
+      await api.updateDebt(debt.id, input)
     } else {
-      await db.debts.add({ ...data, createdAt: Date.now() } as Debt)
-      toast.success('Dívida registada.')
+      await api.addDebt(input)
     }
-    onOpenChange(false)
-  }
+  })
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
@@ -156,7 +148,18 @@ function DebtFormDrawer({
                 onChange={(e) => setDueDate(e.target.value)}
               />
             </div>
-            <Button size="lg" onClick={save}>
+            <Button
+              size="lg"
+              disabled={save.isPending}
+              onClick={() =>
+                save.mutate(undefined, {
+                  onSuccess: () => {
+                    toast.success(debt ? 'Dívida atualizada.' : 'Dívida registada.')
+                    onOpenChange(false)
+                  },
+                })
+              }
+            >
               {debt ? 'Guardar alterações' : 'Registar dívida'}
             </Button>
           </div>
@@ -180,37 +183,28 @@ function DebtDetailDrawer({
   onEdit: () => void
 }) {
   const [amountStr, setAmountStr] = useState('')
-  const payments = useLiveQuery(
-    () => db.debtPayments.where('debtId').equals(debt.id).reverse().sortBy('date'),
-    [debt.id],
-  )
+  const { data: payments } = useDebtPayments()
 
   useEffect(() => {
     if (open) setAmountStr('')
   }, [open])
 
+  const debtPayments = (payments ?? []).filter((p) => p.debtId === debt.id)
   const remaining = Math.max(0, debt.totalCents - paid)
   const pct = debt.totalCents > 0 ? Math.min(100, (paid / debt.totalCents) * 100) : 0
 
-  async function addPayment() {
+  const addPayment = useAppMutation(async () => {
     const cents = parseAmount(amountStr)
-    if (!cents) {
-      toast.error('Indica um valor válido.')
-      return
+    if (!cents) throw new Error('Indica um valor válido.')
+    if (cents > remaining) {
+      throw new Error(`Só faltam ${formatCents(remaining)} — não podes pagar mais do que isso.`)
     }
-    await db.debtPayments.add({ debtId: debt.id, amountCents: cents, date: todayISO() })
-    setAmountStr('')
-    toast.success('Pagamento registado.')
-  }
+    await api.addDebtPayment(debt.id, cents)
+  })
 
-  async function removeDebt() {
-    await db.transaction('rw', db.debts, db.debtPayments, async () => {
-      await db.debtPayments.where('debtId').equals(debt.id).delete()
-      await db.debts.delete(debt.id)
-    })
-    toast.success('Dívida apagada.')
-    onOpenChange(false)
-  }
+  const removeDebt = useAppMutation(async () => {
+    await api.deleteDebt(debt.id)
+  }, 'Dívida apagada.')
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
@@ -233,21 +227,35 @@ function DebtDetailDrawer({
               </p>
             </div>
 
-            <div className="flex gap-2">
-              <Input
-                inputMode="decimal"
-                value={amountStr}
-                onChange={(e) => setAmountStr(e.target.value)}
-                placeholder="0,00"
-                aria-label="Valor do pagamento"
-                className="amount flex-1"
-              />
-              <Button onClick={addPayment}>Registar pagamento</Button>
-            </div>
+            {remaining > 0 && (
+              <div className="flex gap-2">
+                <Input
+                  inputMode="decimal"
+                  value={amountStr}
+                  onChange={(e) => setAmountStr(e.target.value)}
+                  placeholder="0,00"
+                  aria-label="Valor do pagamento"
+                  className="amount flex-1"
+                />
+                <Button
+                  disabled={addPayment.isPending}
+                  onClick={() =>
+                    addPayment.mutate(undefined, {
+                      onSuccess: () => {
+                        setAmountStr('')
+                        toast.success('Pagamento registado.')
+                      },
+                    })
+                  }
+                >
+                  Registar pagamento
+                </Button>
+              </div>
+            )}
 
-            {payments && payments.length > 0 && (
+            {debtPayments.length > 0 && (
               <div className="divide-y divide-border rounded-2xl bg-secondary/40 px-4">
-                {payments.map((p) => (
+                {debtPayments.map((p) => (
                   <div key={p.id} className="flex items-center justify-between py-2.5 text-sm">
                     <span className="text-muted-foreground">{formatDate(p.date)}</span>
                     <AmountText cents={p.amountCents} signed={false} />
@@ -275,7 +283,11 @@ function DebtDetailDrawer({
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={removeDebt}>Apagar</AlertDialogAction>
+                    <AlertDialogAction
+                      onClick={() => removeDebt.mutate(undefined, { onSuccess: () => onOpenChange(false) })}
+                    >
+                      Apagar
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -323,15 +335,15 @@ function DebtCard({
 }
 
 export default function DebtsPage() {
-  const debts = useLiveQuery(() => db.debts.orderBy('createdAt').reverse().toArray(), [])
-  const payments = useLiveQuery(() => db.debtPayments.toArray(), [])
+  const { data: debts } = useDebts()
+  const { data: payments } = useDebtPayments()
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Debt | undefined>()
-  const [detailId, setDetailId] = useState<number | undefined>()
+  const [detailId, setDetailId] = useState<string | undefined>()
 
   if (!debts || !payments) return null
 
-  const paidByDebt = new Map<number, number>()
+  const paidByDebt = new Map<string, number>()
   for (const p of payments) {
     paidByDebt.set(p.debtId, (paidByDebt.get(p.debtId) ?? 0) + p.amountCents)
   }
