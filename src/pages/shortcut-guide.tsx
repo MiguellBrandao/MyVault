@@ -16,11 +16,15 @@ const STEPS = [
   },
   {
     title: 'Escolhe o gatilho «Transação»',
-    body: 'No iOS 26 chama-se «Wallet». Seleciona os cartões que queres vigiar e marca «Executar imediatamente» — o registo acontece em segundo plano, sem abrir nada.',
+    body: 'No iOS 26 chama-se «Wallet». Seleciona os cartões que queres vigiar e marca «Executar imediatamente» — o registo acontece em segundo plano, sem abrir nada. Toca em Seguinte.',
   },
   {
-    title: 'Adiciona a ação «Obter conteúdo de URL»',
-    body: 'Usa o URL abaixo. Em «Mostrar mais»: Método POST; cabeçalhos e corpo como indicado.',
+    title: 'Cria uma automatização em branco',
+    body: 'Quando o iOS perguntar o que fazer, escolhe «Nova automatização em branco» (não uma das sugestões). No editor, toca em «Adicionar ação».',
+  },
+  {
+    title: 'Pesquisa «Obter conteúdo de URL»',
+    body: 'Adiciona essa ação e cola o URL abaixo. Expande «Mostrar mais»: Método POST; cabeçalhos e corpo como indicado. Nos campos amount e merchant usa as variáveis Montante e Comerciante da transação (barra por cima do teclado).',
   },
   {
     title: 'Testa com um pagamento',
