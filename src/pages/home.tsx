@@ -8,7 +8,7 @@ import {
   useSubscriptions,
   useTransactions,
 } from '@/lib/hooks'
-import { monthlyEquivalentCents } from '@/lib/subscriptions'
+import { monthlyEquivalentCents, upcomingThisMonth } from '@/lib/subscriptions'
 import { getCategoryIcon } from '@/lib/category-icons'
 import { formatCents, formatDate, formatMonth, todayISO } from '@/lib/money'
 import type { Transaction } from '@/lib/types'
@@ -115,6 +115,7 @@ export default function HomePage() {
   const subsMonthly = activeSubs
     .filter((s) => s.type === 'expense')
     .reduce((sum, s) => sum + monthlyEquivalentCents(s), 0)
+  const upcoming = upcomingThisMonth(activeSubs, today)
 
   return (
     <div className="flex flex-col gap-6">
@@ -186,6 +187,14 @@ export default function HomePage() {
             Despesas <AmountText cents={expense} type="expense" signed={false} className="text-foreground" />
           </span>
         </div>
+        {(upcoming.expense > 0 || upcoming.income > 0) && (
+          <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
+            Subscrições até ao fim do mês:{' '}
+            {upcoming.expense > 0 && <AmountText cents={upcoming.expense} type="expense" className="text-xs" />}
+            {upcoming.expense > 0 && upcoming.income > 0 && ' · '}
+            {upcoming.income > 0 && <AmountText cents={upcoming.income} type="income" className="text-xs" />}
+          </p>
+        )}
       </section>
 
       {subscriptions.length > 0 && (
