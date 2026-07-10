@@ -3,12 +3,18 @@ import { toast } from 'sonner'
 import { Trash2 } from 'lucide-react'
 import * as api from '@/lib/api'
 import { useAppMutation, useCategories } from '@/lib/hooks'
-import type { Transaction, TxType } from '@/lib/types'
+import type { SubscriptionFrequency, Transaction, TxType } from '@/lib/types'
 import { parseAmount, todayISO } from '@/lib/money'
+import {
+  FREQUENCY_LABELS,
+  isFirstDateValid,
+  recurrenceFromFirstDate,
+} from '@/lib/subscriptions'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { CategoryPicker } from '@/components/category-picker'
 import {
   Drawer,
@@ -48,6 +54,10 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
   const [description, setDescription] = useState('')
   const [categoryIds, setCategoryIds] = useState<string[]>([])
   const [date, setDate] = useState(todayISO())
+  // Modo subscrição (só na criação): em vez de um movimento único,
+  // cria uma despesa/ganho recorrente; `date` passa a ser a primeira cobrança.
+  const [isSubscription, setIsSubscription] = useState(false)
+  const [frequency, setFrequency] = useState<SubscriptionFrequency>('monthly')
 
   const { data: categories } = useCategories()
 
@@ -58,6 +68,8 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
     setDescription(tx?.description ?? '')
     setCategoryIds(tx?.categoryIds ?? [])
     setDate(tx?.date ?? todayISO())
+    setIsSubscription(false)
+    setFrequency('monthly')
   }, [isOpen, tx, defaultType])
 
   function toggleCategory(id: string) {
@@ -72,6 +84,17 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
       finalDescription = categories?.find((c) => c.id === categoryIds[0])?.name ?? ''
     }
     if (!finalDescription) throw new Error('Indica uma descrição ou escolhe uma categoria.')
+    if (isSubscription) {
+      if (!isFirstDateValid(date)) throw new Error('A primeira cobrança não pode ser no passado.')
+      await api.addSubscription({
+        type,
+        name: finalDescription,
+        amountCents,
+        categoryIds,
+        ...recurrenceFromFirstDate(frequency, date),
+      })
+      return
+    }
     const input = { type, amountCents, description: finalDescription, categoryIds, date }
     if (tx) {
       await api.updateTransaction(tx.id, input)
@@ -88,7 +111,13 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
     save.mutate(undefined, {
       onSuccess: () => {
         toast.success(
-          tx ? 'Movimento atualizado.' : type === 'expense' ? 'Despesa registada.' : 'Ganho registado.',
+          isSubscription
+            ? 'Subscrição criada.'
+            : tx
+              ? 'Movimento atualizado.'
+              : type === 'expense'
+                ? 'Despesa registada.'
+                : 'Ganho registado.',
         )
         setOpen(false)
       },
@@ -158,26 +187,85 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
             <div className="flex flex-col gap-2">
               <Label>Categorias</Label>
               <CategoryPicker type={type} values={categoryIds} onToggle={toggleCategory} />
+              {isSubscription && (
+                <p className="text-xs text-muted-foreground">
+                  A categoria «Subscrições» é adicionada automaticamente.
+                </p>
+              )}
             </div>
 
+            {!tx && (
+              <div className="flex items-center justify-between gap-3 rounded-2xl bg-secondary/40 px-4 py-3">
+                <div>
+                  <Label htmlFor="tx-recurring">É uma subscrição</Label>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Repete-se e é registada automaticamente no dia certo.
+                  </p>
+                </div>
+                <Switch
+                  id="tx-recurring"
+                  checked={isSubscription}
+                  onCheckedChange={setIsSubscription}
+                />
+              </div>
+            )}
+
+            {isSubscription && (
+              <div className="flex flex-col gap-2">
+                <Label>Frequência</Label>
+                <div className="grid grid-cols-3 rounded-full bg-secondary p-1" role="radiogroup" aria-label="Frequência">
+                  {(['weekly', 'monthly', 'yearly'] as const).map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      role="radio"
+                      aria-checked={frequency === f}
+                      onClick={() => setFrequency(f)}
+                      className={cn(
+                        'rounded-full py-2 text-sm font-medium transition-colors',
+                        frequency === f ? 'bg-brass/20 text-brass' : 'text-muted-foreground',
+                      )}
+                    >
+                      {FREQUENCY_LABELS[f]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col gap-2">
-              <Label htmlFor="tx-date">Data</Label>
+              <Label htmlFor="tx-date">{isSubscription ? 'Primeira cobrança' : 'Data'}</Label>
               <Input
                 id="tx-date"
                 type="date"
+                min={isSubscription ? todayISO() : undefined}
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
-              {date > todayISO() && (
+              {isSubscription ? (
                 <p className="text-xs text-muted-foreground">
-                  Movimento futuro: só conta para o saldo a partir dessa data.
+                  {frequency === 'weekly' && 'Repete todas as semanas nesse dia da semana.'}
+                  {frequency === 'monthly' && 'Repete todos os meses nesse dia (em meses curtos, no último dia).'}
+                  {frequency === 'yearly' && 'Repete todos os anos nessa data.'}
                 </p>
+              ) : (
+                date > todayISO() && (
+                  <p className="text-xs text-muted-foreground">
+                    Movimento futuro: só conta para o saldo a partir dessa data.
+                  </p>
+                )
               )}
             </div>
 
             <div className="flex flex-col gap-2 pt-1">
               <Button size="lg" onClick={submit} disabled={save.isPending}>
-                {tx ? 'Guardar alterações' : type === 'expense' ? 'Registar despesa' : 'Registar ganho'}
+                {isSubscription
+                  ? 'Criar subscrição'
+                  : tx
+                    ? 'Guardar alterações'
+                    : type === 'expense'
+                      ? 'Registar despesa'
+                      : 'Registar ganho'}
               </Button>
               {tx && (
                 <AlertDialog>

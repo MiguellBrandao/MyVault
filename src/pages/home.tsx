@@ -188,7 +188,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {activeSubs.length > 0 && (
+      {subscriptions.length > 0 && (
         <Link to="/subscricoes" className="flex items-center gap-3 rounded-3xl bg-card px-5 py-4">
           <span aria-hidden className="flex size-10 items-center justify-center rounded-full bg-secondary text-muted-foreground">
             <Repeat className="size-5" />
