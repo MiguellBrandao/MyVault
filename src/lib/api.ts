@@ -6,6 +6,8 @@ import type {
   DebtPayment,
   Goal,
   GoalEntry,
+  Subscription,
+  SubscriptionFrequency,
   Transaction,
   TxType,
 } from './types'
@@ -283,6 +285,81 @@ export async function addGoalEntry(goalId: string, amountCents: number): Promise
   const { error } = await supabase
     .from('goal_entries')
     .insert({ goal_id: goalId, amount_cents: amountCents })
+  throwIf(error)
+}
+
+/* ── Subscrições ────────────────────────────────────────────── */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToSubscription(r: any): Subscription {
+  return {
+    id: r.id,
+    type: r.type,
+    name: r.name,
+    amountCents: r.amount_cents,
+    categoryId: r.category_id,
+    frequency: r.frequency,
+    dayOfWeek: r.day_of_week,
+    dayOfMonth: r.day_of_month,
+    monthOfYear: r.month_of_year,
+    nextDate: r.next_date,
+    active: r.active,
+    createdAt: r.created_at,
+  }
+}
+
+export async function listSubscriptions(): Promise<Subscription[]> {
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .select('*')
+    .order('next_date', { ascending: true })
+  throwIf(error)
+  return (data ?? []).map(rowToSubscription)
+}
+
+export interface SubscriptionInput {
+  type: TxType
+  name: string
+  amountCents: number
+  categoryId: string | null
+  frequency: SubscriptionFrequency
+  dayOfWeek: number | null
+  dayOfMonth: number | null
+  monthOfYear: number | null
+  nextDate: string
+}
+
+function subscriptionRow(input: SubscriptionInput) {
+  return {
+    type: input.type,
+    name: input.name,
+    amount_cents: input.amountCents,
+    category_id: input.categoryId,
+    frequency: input.frequency,
+    day_of_week: input.dayOfWeek,
+    day_of_month: input.dayOfMonth,
+    month_of_year: input.monthOfYear,
+    next_date: input.nextDate,
+  }
+}
+
+export async function addSubscription(input: SubscriptionInput): Promise<void> {
+  const { error } = await supabase.from('subscriptions').insert(subscriptionRow(input))
+  throwIf(error)
+}
+
+export async function updateSubscription(id: string, input: SubscriptionInput): Promise<void> {
+  const { error } = await supabase.from('subscriptions').update(subscriptionRow(input)).eq('id', id)
+  throwIf(error)
+}
+
+export async function setSubscriptionActive(id: string, active: boolean): Promise<void> {
+  const { error } = await supabase.from('subscriptions').update({ active }).eq('id', id)
+  throwIf(error)
+}
+
+export async function deleteSubscription(id: string): Promise<void> {
+  const { error } = await supabase.from('subscriptions').delete().eq('id', id)
   throwIf(error)
 }
 

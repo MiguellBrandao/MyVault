@@ -6,6 +6,7 @@ import App from '@/App'
 import HomePage from '@/pages/home'
 import TransactionsPage from '@/pages/transactions'
 import GoalsPage from '@/pages/goals'
+import SubscriptionsPage from '@/pages/subscriptions'
 import DebtsPage from '@/pages/debts'
 import SettingsPage from '@/pages/settings'
 import ShortcutGuidePage from '@/pages/shortcut-guide'
@@ -25,6 +26,7 @@ const router = createHashRouter([
       { index: true, element: <HomePage /> },
       { path: 'movimentos', element: <TransactionsPage /> },
       { path: 'metas', element: <GoalsPage /> },
+      { path: 'subscricoes', element: <SubscriptionsPage /> },
       { path: 'dividas', element: <DebtsPage /> },
       { path: 'ajustes', element: <SettingsPage /> },
       { path: 'ajustes/atalho', element: <ShortcutGuidePage /> },

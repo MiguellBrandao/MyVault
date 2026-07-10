@@ -38,7 +38,7 @@ export function TxRow({ tx, categories, hideDate }: TxRowProps) {
             {[
               hideDate ? null : formatDate(tx.date),
               cat?.name,
-              tx.source === 'wallet' ? 'Wallet' : null,
+              tx.source === 'wallet' ? 'Wallet' : tx.source === 'subscription' ? 'Subscrição' : null,
               isFuture ? 'Agendado' : null,
             ]
               .filter(Boolean)

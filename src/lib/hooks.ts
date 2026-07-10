@@ -26,6 +26,10 @@ export function useGoalEntries() {
   return useQuery({ queryKey: ['goal_entries'], queryFn: api.listGoalEntries })
 }
 
+export function useSubscriptions() {
+  return useQuery({ queryKey: ['subscriptions'], queryFn: api.listSubscriptions })
+}
+
 /**
  * Mutação genérica: invalida todas as queries no fim (os dados são pequenos
  * e ficam sempre coerentes) e mostra o erro ao utilizador se falhar.

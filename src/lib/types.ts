@@ -1,5 +1,5 @@
 export type TxType = 'expense' | 'income'
-export type TxSource = 'manual' | 'wallet'
+export type TxSource = 'manual' | 'wallet' | 'subscription'
 export type TxStatus = 'confirmed' | 'pending'
 
 export interface Transaction {
@@ -51,6 +51,27 @@ export interface Goal {
   name: string
   targetCents: number
   deadline: string | null
+  createdAt: string
+}
+
+export type SubscriptionFrequency = 'weekly' | 'monthly' | 'yearly'
+
+export interface Subscription {
+  id: string
+  type: TxType
+  name: string
+  amountCents: number
+  categoryId: string | null
+  frequency: SubscriptionFrequency
+  /** 0 = domingo … 6 = sábado (semanal). */
+  dayOfWeek: number | null
+  /** 1–31; em meses curtos ajusta para o último dia (mensal/anual). */
+  dayOfMonth: number | null
+  /** 1–12 (anual). */
+  monthOfYear: number | null
+  /** Próxima cobrança, em ISO `yyyy-MM-dd`. */
+  nextDate: string
+  active: boolean
   createdAt: string
 }
 

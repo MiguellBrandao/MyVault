@@ -1,7 +1,14 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Settings, Wallet } from 'lucide-react'
-import { useCategories, useGoalEntries, useGoals, useTransactions } from '@/lib/hooks'
+import { ChevronRight, Repeat, Settings, Wallet } from 'lucide-react'
+import {
+  useCategories,
+  useGoalEntries,
+  useGoals,
+  useSubscriptions,
+  useTransactions,
+} from '@/lib/hooks'
+import { monthlyEquivalentCents } from '@/lib/subscriptions'
 import { getCategoryIcon } from '@/lib/category-icons'
 import { formatCents, formatDate, formatMonth, todayISO } from '@/lib/money'
 import type { Transaction } from '@/lib/types'
@@ -65,8 +72,9 @@ export default function HomePage() {
   const { data: categories } = useCategories()
   const { data: goals } = useGoals()
   const { data: goalEntries } = useGoalEntries()
+  const { data: subscriptions } = useSubscriptions()
 
-  if (!txs || !categories || !goals || !goalEntries) return null
+  if (!txs || !categories || !goals || !goalEntries || !subscriptions) return null
 
   const catMap = new Map(categories.map((c) => [c.id, c]))
   const confirmed = txs.filter((t) => t.status === 'confirmed')
@@ -100,6 +108,11 @@ export default function HomePage() {
   const recent = [...confirmed]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 5)
+
+  const activeSubs = subscriptions.filter((s) => s.active)
+  const subsMonthly = activeSubs
+    .filter((s) => s.type === 'expense')
+    .reduce((sum, s) => sum + monthlyEquivalentCents(s), 0)
 
   return (
     <div className="flex flex-col gap-6">
@@ -172,6 +185,22 @@ export default function HomePage() {
           </span>
         </div>
       </section>
+
+      {activeSubs.length > 0 && (
+        <Link to="/subscricoes" className="flex items-center gap-3 rounded-3xl bg-card px-5 py-4">
+          <span aria-hidden className="flex size-10 items-center justify-center rounded-full bg-secondary text-muted-foreground">
+            <Repeat className="size-5" />
+          </span>
+          <span className="flex-1">
+            <span className="block font-medium">Subscrições</span>
+            <span className="block text-xs text-muted-foreground">
+              {activeSubs.length} {activeSubs.length === 1 ? 'ativa' : 'ativas'}
+            </span>
+          </span>
+          <span className="amount text-sm text-expense">{formatCents(subsMonthly)}/mês</span>
+          <ChevronRight className="size-4 text-muted-foreground" />
+        </Link>
+      )}
 
       {topCategories.length > 0 && (
         <section>

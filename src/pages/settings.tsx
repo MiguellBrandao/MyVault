@@ -5,6 +5,7 @@ import {
   ChevronRight,
   LogOut,
   Plus,
+  Repeat,
   Tags,
   Trash2,
   Wallet,
@@ -198,6 +199,11 @@ export default function SettingsPage() {
         <Link to="/ajustes/atalho" className="flex items-center gap-3 px-4 py-3.5">
           <Wallet className="size-5 text-muted-foreground" />
           <span className="flex-1 font-medium">Atalho da Wallet</span>
+          <ChevronRight className="size-4 text-muted-foreground" />
+        </Link>
+        <Link to="/subscricoes" className="flex items-center gap-3 px-4 py-3.5">
+          <Repeat className="size-5 text-muted-foreground" />
+          <span className="flex-1 font-medium">Subscrições</span>
           <ChevronRight className="size-4 text-muted-foreground" />
         </Link>
         <CategoriesDrawer />
