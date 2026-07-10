@@ -8,7 +8,7 @@ export interface Transaction {
   /** Valor em cêntimos, sempre positivo; o sinal vem de `type`. */
   amountCents: number
   description: string
-  categoryId: string | null
+  categoryIds: string[]
   /** Data do movimento em formato ISO `yyyy-MM-dd`. */
   date: string
   source: TxSource
@@ -24,6 +24,8 @@ export interface Category {
   icon: string
   type: TxType
   sortOrder: number
+  /** «Subscrições»: indelével, nome reservado, atribuída automaticamente. */
+  isSystem: boolean
 }
 
 /** 'owe' = eu devo; 'owed' = devem-me. */
@@ -61,7 +63,7 @@ export interface Subscription {
   type: TxType
   name: string
   amountCents: number
-  categoryId: string | null
+  categoryIds: string[]
   frequency: SubscriptionFrequency
   /** 0 = domingo … 6 = sábado (semanal). */
   dayOfWeek: number | null

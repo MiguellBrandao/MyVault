@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   ChevronRight,
+  Lock,
   LogOut,
   Plus,
   Repeat,
@@ -38,6 +39,9 @@ function CategoriesDrawer() {
 
   const add = useAppMutation(async () => {
     if (!name.trim()) throw new Error('Dá um nome à categoria.')
+    if (name.trim().toLowerCase() === 'subscrições') {
+      throw new Error('Esse nome está reservado para a categoria de sistema.')
+    }
     const maxOrder = (categories ?? [])
       .filter((c) => c.type === type)
       .reduce((m, c) => Math.max(m, c.sortOrder), -1)
@@ -67,14 +71,23 @@ function CategoriesDrawer() {
                 <div key={c.id} className="flex items-center gap-2.5 py-2 text-sm">
                   <Icon aria-hidden className="size-4 text-muted-foreground" />
                   <span className="flex-1">{c.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => remove.mutate(c.id)}
-                    aria-label={`Apagar categoria ${c.name}`}
-                    className="p-1 text-muted-foreground"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                  {c.isSystem ? (
+                    <span
+                      title="Categoria de sistema — atribuída automaticamente às subscrições"
+                      className="p-1 text-muted-foreground/50"
+                    >
+                      <Lock aria-label="Categoria de sistema" className="size-4" />
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => remove.mutate(c.id)}
+                      aria-label={`Apagar categoria ${c.name}`}
+                      className="p-1 text-muted-foreground"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  )}
                 </div>
               )
             })}

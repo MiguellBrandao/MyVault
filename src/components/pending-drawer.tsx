@@ -25,23 +25,27 @@ interface PendingDrawerProps {
 export function PendingDrawer({ tx, open, onOpenChange }: PendingDrawerProps) {
   const [amountStr, setAmountStr] = useState('')
   const [description, setDescription] = useState('')
-  const [categoryId, setCategoryId] = useState<string | null>(null)
+  const [categoryIds, setCategoryIds] = useState<string[]>([])
   const { data: txs } = useTransactions()
 
   useEffect(() => {
     if (!open) return
     setAmountStr((tx.amountCents / 100).toFixed(2).replace('.', ','))
     setDescription(tx.description)
-    // Sugere a categoria usada da última vez neste comerciante.
+    // Sugere as categorias usadas da última vez neste comerciante.
     const previous = txs?.find(
       (t) =>
         t.id !== tx.id &&
         t.status === 'confirmed' &&
-        t.categoryId &&
+        t.categoryIds.length > 0 &&
         t.description.toLowerCase() === tx.description.toLowerCase(),
     )
-    setCategoryId(previous?.categoryId ?? null)
+    setCategoryIds(previous?.categoryIds ?? [])
   }, [open, tx, txs])
+
+  function toggleCategory(id: string) {
+    setCategoryIds((ids) => (ids.includes(id) ? ids.filter((i) => i !== id) : [...ids, id]))
+  }
 
   const confirm = useAppMutation(async () => {
     const amountCents = parseAmount(amountStr)
@@ -49,7 +53,7 @@ export function PendingDrawer({ tx, open, onOpenChange }: PendingDrawerProps) {
     await api.confirmTransaction(tx.id, {
       amountCents,
       description: description.trim() || 'Pagamento Wallet',
-      categoryId,
+      categoryIds,
     })
   }, 'Despesa confirmada.')
 
@@ -83,8 +87,8 @@ export function PendingDrawer({ tx, open, onOpenChange }: PendingDrawerProps) {
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label>Categoria</Label>
-              <CategoryPicker type="expense" value={categoryId} onChange={setCategoryId} />
+              <Label>Categorias</Label>
+              <CategoryPicker type="expense" values={categoryIds} onToggle={toggleCategory} />
             </div>
             <div className="flex flex-col gap-2">
               <Button

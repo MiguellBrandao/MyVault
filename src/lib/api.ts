@@ -25,7 +25,8 @@ function rowToTx(r: any): Transaction {
     type: r.type,
     amountCents: r.amount_cents,
     description: r.description,
-    categoryId: r.category_id,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    categoryIds: (r.transaction_categories ?? []).map((l: any) => l.category_id),
     date: r.date,
     source: r.source,
     status: r.status,
@@ -36,30 +37,50 @@ function rowToTx(r: any): Transaction {
 export async function listTransactions(): Promise<Transaction[]> {
   const { data, error } = await supabase
     .from('transactions')
-    .select('*')
+    .select('*, transaction_categories(category_id)')
     .order('date', { ascending: false })
     .order('created_at', { ascending: false })
   throwIf(error)
   return (data ?? []).map(rowToTx)
 }
 
+/** Substitui o conjunto de categorias de um movimento. */
+async function setTxCategories(txId: string, categoryIds: string[]): Promise<void> {
+  const { error: delError } = await supabase
+    .from('transaction_categories')
+    .delete()
+    .eq('transaction_id', txId)
+  throwIf(delError)
+  const unique = [...new Set(categoryIds)]
+  if (unique.length > 0) {
+    const { error } = await supabase
+      .from('transaction_categories')
+      .insert(unique.map((category_id) => ({ transaction_id: txId, category_id })))
+    throwIf(error)
+  }
+}
+
 export interface TxInput {
   type: TxType
   amountCents: number
   description: string
-  categoryId: string | null
+  categoryIds: string[]
   date: string
 }
 
 export async function addTransaction(input: TxInput): Promise<void> {
-  const { error } = await supabase.from('transactions').insert({
-    type: input.type,
-    amount_cents: input.amountCents,
-    description: input.description,
-    category_id: input.categoryId,
-    date: input.date,
-  })
+  const { data, error } = await supabase
+    .from('transactions')
+    .insert({
+      type: input.type,
+      amount_cents: input.amountCents,
+      description: input.description,
+      date: input.date,
+    })
+    .select('id')
+    .single()
   throwIf(error)
+  await setTxCategories(data!.id, input.categoryIds)
 }
 
 export async function updateTransaction(id: string, input: TxInput): Promise<void> {
@@ -69,28 +90,28 @@ export async function updateTransaction(id: string, input: TxInput): Promise<voi
       type: input.type,
       amount_cents: input.amountCents,
       description: input.description,
-      category_id: input.categoryId,
       date: input.date,
     })
     .eq('id', id)
   throwIf(error)
+  await setTxCategories(id, input.categoryIds)
 }
 
 /** Confirma um movimento pendente vindo do Atalho da Wallet. */
 export async function confirmTransaction(
   id: string,
-  input: Pick<TxInput, 'amountCents' | 'description' | 'categoryId'>,
+  input: Pick<TxInput, 'amountCents' | 'description' | 'categoryIds'>,
 ): Promise<void> {
   const { error } = await supabase
     .from('transactions')
     .update({
       amount_cents: input.amountCents,
       description: input.description,
-      category_id: input.categoryId,
       status: 'confirmed',
     })
     .eq('id', id)
   throwIf(error)
+  await setTxCategories(id, input.categoryIds)
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
@@ -102,7 +123,14 @@ export async function deleteTransaction(id: string): Promise<void> {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToCategory(r: any): Category {
-  return { id: r.id, name: r.name, icon: r.icon, type: r.type, sortOrder: r.sort_order }
+  return {
+    id: r.id,
+    name: r.name,
+    icon: r.icon,
+    type: r.type,
+    sortOrder: r.sort_order,
+    isSystem: r.is_system,
+  }
 }
 
 export async function listCategories(): Promise<Category[]> {
@@ -126,6 +154,12 @@ export async function addCategory(input: {
     type: input.type,
     sort_order: input.sortOrder,
   })
+  if (error?.message.includes('duplicate key')) {
+    throw new Error('Já existe uma categoria com esse nome.')
+  }
+  if (error?.message.includes('row-level security')) {
+    throw new Error('Esse nome está reservado para a categoria de sistema.')
+  }
   throwIf(error)
 }
 
@@ -297,7 +331,8 @@ function rowToSubscription(r: any): Subscription {
     type: r.type,
     name: r.name,
     amountCents: r.amount_cents,
-    categoryId: r.category_id,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    categoryIds: (r.subscription_categories ?? []).map((l: any) => l.category_id),
     frequency: r.frequency,
     dayOfWeek: r.day_of_week,
     dayOfMonth: r.day_of_month,
@@ -311,17 +346,45 @@ function rowToSubscription(r: any): Subscription {
 export async function listSubscriptions(): Promise<Subscription[]> {
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('*')
+    .select('*, subscription_categories(category_id)')
     .order('next_date', { ascending: true })
   throwIf(error)
   return (data ?? []).map(rowToSubscription)
+}
+
+async function systemCategoryId(): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id')
+    .eq('is_system', true)
+    .limit(1)
+    .maybeSingle()
+  throwIf(error)
+  return data?.id ?? null
+}
+
+/** Substitui as categorias da subscrição, garantindo sempre a de sistema. */
+async function setSubscriptionCategories(subId: string, categoryIds: string[]): Promise<void> {
+  const system = await systemCategoryId()
+  const unique = [...new Set(system ? [...categoryIds, system] : categoryIds)]
+  const { error: delError } = await supabase
+    .from('subscription_categories')
+    .delete()
+    .eq('subscription_id', subId)
+  throwIf(delError)
+  if (unique.length > 0) {
+    const { error } = await supabase
+      .from('subscription_categories')
+      .insert(unique.map((category_id) => ({ subscription_id: subId, category_id })))
+    throwIf(error)
+  }
 }
 
 export interface SubscriptionInput {
   type: TxType
   name: string
   amountCents: number
-  categoryId: string | null
+  categoryIds: string[]
   frequency: SubscriptionFrequency
   dayOfWeek: number | null
   dayOfMonth: number | null
@@ -334,7 +397,6 @@ function subscriptionRow(input: SubscriptionInput) {
     type: input.type,
     name: input.name,
     amount_cents: input.amountCents,
-    category_id: input.categoryId,
     frequency: input.frequency,
     day_of_week: input.dayOfWeek,
     day_of_month: input.dayOfMonth,
@@ -344,13 +406,19 @@ function subscriptionRow(input: SubscriptionInput) {
 }
 
 export async function addSubscription(input: SubscriptionInput): Promise<void> {
-  const { error } = await supabase.from('subscriptions').insert(subscriptionRow(input))
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .insert(subscriptionRow(input))
+    .select('id')
+    .single()
   throwIf(error)
+  await setSubscriptionCategories(data!.id, input.categoryIds)
 }
 
 export async function updateSubscription(id: string, input: SubscriptionInput): Promise<void> {
   const { error } = await supabase.from('subscriptions').update(subscriptionRow(input)).eq('id', id)
   throwIf(error)
+  await setSubscriptionCategories(id, input.categoryIds)
 }
 
 export async function setSubscriptionActive(id: string, active: boolean): Promise<void> {

@@ -15,9 +15,15 @@ interface TxRowProps {
 
 export function TxRow({ tx, categories, hideDate }: TxRowProps) {
   const [open, setOpen] = useState(false)
-  const cat = tx.categoryId ? categories.get(tx.categoryId) : undefined
+  const cats = tx.categoryIds
+    .map((id) => categories.get(id))
+    .filter((c): c is Category => c !== undefined)
   const isFuture = tx.date > todayISO()
-  const Icon = cat ? getCategoryIcon(cat.icon) : tx.type === 'income' ? HandCoins : CreditCard
+  const Icon = cats[0]
+    ? getCategoryIcon(cats[0].icon)
+    : tx.type === 'income'
+      ? HandCoins
+      : CreditCard
 
   return (
     <>
@@ -37,7 +43,7 @@ export function TxRow({ tx, categories, hideDate }: TxRowProps) {
           <span className="block text-xs text-muted-foreground">
             {[
               hideDate ? null : formatDate(tx.date),
-              cat?.name,
+              cats.length > 0 ? cats.map((c) => c.name).join(', ') : null,
               tx.source === 'wallet' ? 'Wallet' : tx.source === 'subscription' ? 'Subscrição' : null,
               isFuture ? 'Agendado' : null,
             ]

@@ -46,7 +46,7 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
   const [type, setType] = useState<TxType>(defaultType)
   const [amountStr, setAmountStr] = useState('')
   const [description, setDescription] = useState('')
-  const [categoryId, setCategoryId] = useState<string | null>(null)
+  const [categoryIds, setCategoryIds] = useState<string[]>([])
   const [date, setDate] = useState(todayISO())
 
   const { data: categories } = useCategories()
@@ -56,19 +56,23 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
     setType(tx?.type ?? defaultType)
     setAmountStr(tx ? (tx.amountCents / 100).toFixed(2).replace('.', ',') : '')
     setDescription(tx?.description ?? '')
-    setCategoryId(tx?.categoryId ?? null)
+    setCategoryIds(tx?.categoryIds ?? [])
     setDate(tx?.date ?? todayISO())
   }, [isOpen, tx, defaultType])
+
+  function toggleCategory(id: string) {
+    setCategoryIds((ids) => (ids.includes(id) ? ids.filter((i) => i !== id) : [...ids, id]))
+  }
 
   const save = useAppMutation(async () => {
     const amountCents = parseAmount(amountStr)
     if (!amountCents) throw new Error('Indica um valor válido.')
     let finalDescription = description.trim()
-    if (!finalDescription && categoryId) {
-      finalDescription = categories?.find((c) => c.id === categoryId)?.name ?? ''
+    if (!finalDescription && categoryIds.length > 0) {
+      finalDescription = categories?.find((c) => c.id === categoryIds[0])?.name ?? ''
     }
     if (!finalDescription) throw new Error('Indica uma descrição ou escolhe uma categoria.')
-    const input = { type, amountCents, description: finalDescription, categoryId, date }
+    const input = { type, amountCents, description: finalDescription, categoryIds, date }
     if (tx) {
       await api.updateTransaction(tx.id, input)
     } else {
@@ -106,7 +110,7 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
                 type="button"
                 role="radio"
                 aria-checked={type === 'expense'}
-                onClick={() => { setType('expense'); setCategoryId(null) }}
+                onClick={() => { setType('expense'); setCategoryIds([]) }}
                 className={cn(
                   'rounded-full py-2 text-sm font-medium transition-colors',
                   type === 'expense' ? 'bg-expense/20 text-expense' : 'text-muted-foreground',
@@ -118,7 +122,7 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
                 type="button"
                 role="radio"
                 aria-checked={type === 'income'}
-                onClick={() => { setType('income'); setCategoryId(null) }}
+                onClick={() => { setType('income'); setCategoryIds([]) }}
                 className={cn(
                   'rounded-full py-2 text-sm font-medium transition-colors',
                   type === 'income' ? 'bg-income/20 text-income' : 'text-muted-foreground',
@@ -152,8 +156,8 @@ export function TxDrawer({ trigger, tx, defaultType = 'expense', open, onOpenCha
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label>Categoria</Label>
-              <CategoryPicker type={type} value={categoryId} onChange={setCategoryId} />
+              <Label>Categorias</Label>
+              <CategoryPicker type={type} values={categoryIds} onToggle={toggleCategory} />
             </div>
 
             <div className="flex flex-col gap-2">

@@ -54,19 +54,26 @@ function SubscriptionFormDrawer({
   const [type, setType] = useState<TxType>('expense')
   const [name, setName] = useState('')
   const [amountStr, setAmountStr] = useState('')
-  const [categoryId, setCategoryId] = useState<string | null>(null)
+  const [categoryIds, setCategoryIds] = useState<string[]>([])
   const [frequency, setFrequency] = useState<SubscriptionFrequency>('monthly')
   const [firstDate, setFirstDate] = useState(todayISO())
+  const { data: categories } = useCategories()
 
   useEffect(() => {
     if (!open) return
     setType(sub?.type ?? 'expense')
     setName(sub?.name ?? '')
     setAmountStr(sub ? (sub.amountCents / 100).toFixed(2).replace('.', ',') : '')
-    setCategoryId(sub?.categoryId ?? null)
+    // A categoria de sistema não se edita — fica de fora do formulário.
+    const systemIds = new Set((categories ?? []).filter((c) => c.isSystem).map((c) => c.id))
+    setCategoryIds((sub?.categoryIds ?? []).filter((id) => !systemIds.has(id)))
     setFrequency(sub?.frequency ?? 'monthly')
     setFirstDate(sub?.nextDate ?? todayISO())
-  }, [open, sub])
+  }, [open, sub, categories])
+
+  function toggleCategory(id: string) {
+    setCategoryIds((ids) => (ids.includes(id) ? ids.filter((i) => i !== id) : [...ids, id]))
+  }
 
   const save = useAppMutation(async () => {
     const amountCents = parseAmount(amountStr)
@@ -77,7 +84,7 @@ function SubscriptionFormDrawer({
       type,
       name: name.trim(),
       amountCents,
-      categoryId,
+      categoryIds,
       ...recurrenceFromFirstDate(frequency, firstDate),
     }
     if (sub) {
@@ -104,7 +111,7 @@ function SubscriptionFormDrawer({
                 type="button"
                 role="radio"
                 aria-checked={type === 'expense'}
-                onClick={() => { setType('expense'); setCategoryId(null) }}
+                onClick={() => { setType('expense'); setCategoryIds([]) }}
                 className={cn(
                   'rounded-full py-2 text-sm font-medium transition-colors',
                   type === 'expense' ? 'bg-expense/20 text-expense' : 'text-muted-foreground',
@@ -116,7 +123,7 @@ function SubscriptionFormDrawer({
                 type="button"
                 role="radio"
                 aria-checked={type === 'income'}
-                onClick={() => { setType('income'); setCategoryId(null) }}
+                onClick={() => { setType('income'); setCategoryIds([]) }}
                 className={cn(
                   'rounded-full py-2 text-sm font-medium transition-colors',
                   type === 'income' ? 'bg-income/20 text-income' : 'text-muted-foreground',
@@ -187,8 +194,11 @@ function SubscriptionFormDrawer({
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label>Categoria</Label>
-              <CategoryPicker type={type} value={categoryId} onChange={setCategoryId} />
+              <Label>Categorias</Label>
+              <CategoryPicker type={type} values={categoryIds} onToggle={toggleCategory} />
+              <p className="text-xs text-muted-foreground">
+                A categoria «Subscrições» é adicionada automaticamente.
+              </p>
             </div>
 
             <div className="flex flex-col gap-2 pt-1">
@@ -306,8 +316,9 @@ export default function SubscriptionsPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {subs.map((s) => {
-            const cat = s.categoryId ? catMap.get(s.categoryId) : undefined
-            const Icon = getCategoryIcon(cat?.icon)
+            // Mostra a primeira categoria "real"; sem nenhuma, o loop de subscrição.
+            const cat = s.categoryIds.map((id) => catMap.get(id)).find((c) => c && !c.isSystem)
+            const Icon = getCategoryIcon(cat?.icon ?? 'repeat')
             return (
               <button
                 key={s.id}

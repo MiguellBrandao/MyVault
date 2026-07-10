@@ -93,8 +93,10 @@ export default function HomePage() {
 
   const byCategory = new Map<string, number>()
   for (const t of monthTxs) {
-    if (t.type !== 'expense' || !t.categoryId) continue
-    byCategory.set(t.categoryId, (byCategory.get(t.categoryId) ?? 0) + t.amountCents)
+    if (t.type !== 'expense') continue
+    for (const catId of t.categoryIds) {
+      byCategory.set(catId, (byCategory.get(catId) ?? 0) + t.amountCents)
+    }
   }
   const topCategories = [...byCategory.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
   const maxCat = topCategories[0]?.[1] ?? 0
