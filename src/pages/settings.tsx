@@ -30,8 +30,10 @@ import {
 function CategoriesDrawer() {
   const { data: categories } = useCategories()
   const [icon, setIcon] = useState('tag')
+  const [iconOpen, setIconOpen] = useState(false)
   const [name, setName] = useState('')
   const [type, setType] = useState<TxType>('expense')
+  const SelectedIcon = getCategoryIcon(icon)
 
   const add = useAppMutation(async () => {
     if (!name.trim()) throw new Error('Dá um nome à categoria.')
@@ -123,6 +125,20 @@ function CategoriesDrawer() {
                 </button>
               </div>
               <div className="flex gap-2">
+                <button
+                  type="button"
+                  aria-label="Escolher ícone"
+                  aria-expanded={iconOpen}
+                  onClick={() => setIconOpen((o) => !o)}
+                  className={cn(
+                    'flex size-9 shrink-0 items-center justify-center rounded-lg border transition-colors',
+                    iconOpen
+                      ? 'border-brass/60 bg-brass/15 text-brass'
+                      : 'border-input text-muted-foreground',
+                  )}
+                >
+                  <SelectedIcon className="size-4" />
+                </button>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -139,6 +155,7 @@ function CategoriesDrawer() {
                       onSuccess: () => {
                         setName('')
                         setIcon('tag')
+                        setIconOpen(false)
                       },
                     })
                   }
@@ -146,7 +163,15 @@ function CategoriesDrawer() {
                   <Plus className="size-4" />
                 </Button>
               </div>
-              <IconPicker value={icon} onChange={setIcon} />
+              {iconOpen && (
+                <IconPicker
+                  value={icon}
+                  onChange={(n) => {
+                    setIcon(n)
+                    setIconOpen(false)
+                  }}
+                />
+              )}
             </div>
             {section('Despesas', 'expense')}
             {section('Ganhos', 'income')}

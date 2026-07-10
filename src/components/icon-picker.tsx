@@ -6,9 +6,11 @@ import { Input } from '@/components/ui/input'
 
 interface IconPickerProps {
   value: string
+  /** Chamado ao escolher um ícone — quem compõe decide fechar o painel. */
   onChange: (name: string) => void
 }
 
+/** Painel de escolha de ícone (pesquisa + grelha). Renderizar apenas quando aberto. */
 export function IconPicker({ value, onChange }: IconPickerProps) {
   const [query, setQuery] = useState('')
   const q = query.trim().toLowerCase()
