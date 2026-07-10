@@ -9,7 +9,8 @@ create table public.categories (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   name text not null check (char_length(name) between 1 and 60),
-  emoji text not null default '🏷️',
+  -- Nome de ícone lucide em kebab-case (ex.: 'shopping-cart')
+  icon text not null default 'tag',
   type text not null check (type in ('expense', 'income')),
   sort_order int not null default 0,
   created_at timestamptz not null default now()
@@ -120,22 +121,22 @@ language plpgsql
 security definer set search_path = ''
 as $$
 begin
-  insert into public.categories (user_id, name, emoji, type, sort_order) values
-    (new.id, 'Supermercado', '🛒', 'expense', 0),
-    (new.id, 'Restauração', '🍽️', 'expense', 1),
-    (new.id, 'Transportes', '🚗', 'expense', 2),
-    (new.id, 'Casa', '🏠', 'expense', 3),
-    (new.id, 'Contas', '💡', 'expense', 4),
-    (new.id, 'Subscrições', '📱', 'expense', 5),
-    (new.id, 'Lazer', '🎉', 'expense', 6),
-    (new.id, 'Saúde', '🩺', 'expense', 7),
-    (new.id, 'Compras', '👕', 'expense', 8),
-    (new.id, 'Outros', '📦', 'expense', 9),
-    (new.id, 'Salário', '💼', 'income', 0),
-    (new.id, 'Freelance', '💸', 'income', 1),
-    (new.id, 'Presentes', '🎁', 'income', 2),
-    (new.id, 'Investimentos', '📈', 'income', 3),
-    (new.id, 'Outros', '📦', 'income', 4);
+  insert into public.categories (user_id, name, icon, type, sort_order) values
+    (new.id, 'Supermercado', 'shopping-cart', 'expense', 0),
+    (new.id, 'Restauração', 'utensils', 'expense', 1),
+    (new.id, 'Transportes', 'car', 'expense', 2),
+    (new.id, 'Casa', 'house', 'expense', 3),
+    (new.id, 'Contas', 'lightbulb', 'expense', 4),
+    (new.id, 'Subscrições', 'smartphone', 'expense', 5),
+    (new.id, 'Lazer', 'party-popper', 'expense', 6),
+    (new.id, 'Saúde', 'stethoscope', 'expense', 7),
+    (new.id, 'Compras', 'shirt', 'expense', 8),
+    (new.id, 'Outros', 'package', 'expense', 9),
+    (new.id, 'Salário', 'briefcase', 'income', 0),
+    (new.id, 'Freelance', 'laptop', 'income', 1),
+    (new.id, 'Presentes', 'gift', 'income', 2),
+    (new.id, 'Investimentos', 'trending-up', 'income', 3),
+    (new.id, 'Outros', 'package', 'income', 4);
   return new;
 end;
 $$;

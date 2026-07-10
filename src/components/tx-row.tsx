@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { CreditCard, HandCoins } from 'lucide-react'
 import type { Category, Transaction } from '@/lib/types'
+import { getCategoryIcon } from '@/lib/category-icons'
 import { formatDate, todayISO } from '@/lib/money'
 import { AmountText } from '@/components/amount-text'
 import { TxDrawer } from '@/components/tx-drawer'
@@ -15,6 +17,7 @@ export function TxRow({ tx, categories, hideDate }: TxRowProps) {
   const [open, setOpen] = useState(false)
   const cat = tx.categoryId ? categories.get(tx.categoryId) : undefined
   const isFuture = tx.date > todayISO()
+  const Icon = cat ? getCategoryIcon(cat.icon) : tx.type === 'income' ? HandCoins : CreditCard
 
   return (
     <>
@@ -25,9 +28,9 @@ export function TxRow({ tx, categories, hideDate }: TxRowProps) {
       >
         <span
           aria-hidden
-          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-lg"
+          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground"
         >
-          {cat?.emoji ?? (tx.type === 'income' ? '💰' : '💳')}
+          <Icon className="size-5" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium">{tx.description}</span>

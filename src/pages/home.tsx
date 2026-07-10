@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Settings, Wallet } from 'lucide-react'
 import { useCategories, useGoalEntries, useGoals, useTransactions } from '@/lib/hooks'
+import { getCategoryIcon } from '@/lib/category-icons'
 import { formatCents, formatDate, formatMonth, todayISO } from '@/lib/money'
 import type { Transaction } from '@/lib/types'
 import { AmountText } from '@/components/amount-text'
@@ -178,11 +179,12 @@ export default function HomePage() {
           <div className="flex flex-col gap-3 rounded-3xl bg-card p-5">
             {topCategories.map(([catId, cents]) => {
               const cat = catMap.get(catId)
+              const Icon = getCategoryIcon(cat?.icon)
               return (
                 <div key={catId}>
                   <div className="mb-1 flex items-center justify-between text-sm">
-                    <span>
-                      <span aria-hidden className="mr-1.5">{cat?.emoji}</span>
+                    <span className="flex items-center gap-1.5">
+                      <Icon aria-hidden className="size-4 text-muted-foreground" />
                       {cat?.name ?? 'Sem categoria'}
                     </span>
                     <span className="amount text-muted-foreground">{formatCents(cents)}</span>

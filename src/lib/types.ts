@@ -20,7 +20,8 @@ export interface Transaction {
 export interface Category {
   id: string
   name: string
-  emoji: string
+  /** Nome de ícone lucide em kebab-case (ex.: 'shopping-cart'). */
+  icon: string
   type: TxType
   sortOrder: number
 }

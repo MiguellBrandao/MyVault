@@ -100,7 +100,7 @@ export async function deleteTransaction(id: string): Promise<void> {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToCategory(r: any): Category {
-  return { id: r.id, name: r.name, emoji: r.emoji, type: r.type, sortOrder: r.sort_order }
+  return { id: r.id, name: r.name, icon: r.icon, type: r.type, sortOrder: r.sort_order }
 }
 
 export async function listCategories(): Promise<Category[]> {
@@ -114,13 +114,13 @@ export async function listCategories(): Promise<Category[]> {
 
 export async function addCategory(input: {
   name: string
-  emoji: string
+  icon: string
   type: TxType
   sortOrder: number
 }): Promise<void> {
   const { error } = await supabase.from('categories').insert({
     name: input.name,
-    emoji: input.emoji,
+    icon: input.icon,
     type: input.type,
     sort_order: input.sortOrder,
   })
