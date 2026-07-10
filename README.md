@@ -25,14 +25,15 @@ Vite + React 19 + TypeScript · Tailwind CSS 4 + shadcn/ui · Supabase
 (Postgres/Auth/RLS) · TanStack Query · vite-plugin-pwa · deploy automático para
 GitHub Pages via Actions.
 
-## Setup do Supabase
+## Migrações do Supabase
 
-Executar `supabase/schema.sql` uma vez no SQL Editor do projeto. Cria as tabelas,
-as políticas RLS (cada utilizador só acede às suas linhas), as categorias por
-omissão para novos utilizadores, e a função `wallet_add` usada pelo Atalho.
+O schema vive em `supabase/migrations/` (tabelas, políticas RLS, categorias por
+omissão, função `wallet_add` do Atalho). A cada push ao `main`, o workflow corre
+`supabase db push` e aplica automaticamente as migrações ainda não aplicadas —
+basta adicionar um novo ficheiro `AAAAMMDDHHMMSS_nome.sql` e fazer commit.
 
-Bases de dados criadas antes das migrações: correr também
-`supabase/fix-wallet-add.sql` e `supabase/migrate-icons.sql` (uma vez cada).
+Requer os segredos `SUPABASE_ACCESS_TOKEN` e `SUPABASE_DB_PASSWORD` nas
+definições de Actions do repositório.
 
 ## Desenvolvimento
 

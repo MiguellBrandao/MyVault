@@ -1,7 +1,16 @@
--- Migração: categorias passam de emoji para ícones (nomes lucide, kebab-case).
--- Colar no SQL Editor e executar uma vez.
+-- Categorias passam de emoji para ícones (nomes lucide, kebab-case).
 
-alter table public.categories rename column emoji to icon;
+-- Rename com guarda: permite correr quer a coluna já tenha sido migrada quer não.
+do $$
+begin
+  if exists (
+    select from information_schema.columns
+    where table_schema = 'public' and table_name = 'categories' and column_name = 'emoji'
+  ) then
+    alter table public.categories rename column emoji to icon;
+  end if;
+end $$;
+
 alter table public.categories alter column icon set default 'tag';
 
 -- Categorias iniciais de TODOS os utilizadores existentes → ícone adequado.
